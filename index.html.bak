@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>水质微塑料数据管理系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.321.0/font/lucide.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --secondary: #64748b;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --background: #f8fafc;
+            --surface: #ffffff;
+        }
+        
+        body {
+            background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 280px);
+            min-height: 100vh;
+        }
+
+        .modal {
+            transition: opacity 0.25s ease;
+        }
+        body.modal-active {
+            overflow: hidden;
+        }
+        
+        .table-container {
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 transparent;
+        }
+        
+        .table-container::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        
+        .table-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .table-container::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 20px;
+        }
+        
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* Stats Card Hover Effect */
+        .stats-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .stats-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Glassmorphism for Navbar */
+        .glass-nav {
+            background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 60%, #38bdf8 130%);
+            backdrop-filter: blur(8px);
+        }
+
+        /* Mobile Specific Adjustments */
+        @media (max-width: 768px) {
+            .nav-buttons button {
+                padding: 0.45rem 0.7rem !important;
+            }
+            /* Modal becomes a bottom sheet */
+            .modal {
+                align-items: flex-end !important;
+            }
+            .modal-container {
+                width: 100% !important;
+                max-width: 100% !important;
+                max-height: 92vh !important;
+                margin: 0 !important;
+                border-radius: 1.25rem 1.25rem 0 0 !important;
+            }
+            .table-container {
+                -webkit-overflow-scrolling: touch;
+            }
+            /* Prevent iOS input focus zoom */
+            input, select, textarea {
+                font-size: 16px !important;
+            }
+        }
+
+        /* Mobile card list replaces wide table on small screens */
+        .mobile-card-list { display: none; }
+        @media (max-width: 767.98px) {
+            .desktop-table-wrap { display: none !important; }
+            .mobile-card-list { display: block !important; }
+        }
+
+        /* Native details/summary cleanup */
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+        details[open] .details-chevron { transform: rotate(180deg); }
+
+        /* Custom Table Styling */
+        .custom-table thead tr:first-child th {
+            border-top: none;
+        }
+        .custom-table th, .custom-table td {
+            border-color: #f1f5f9;
+        }
+        
+        /* Sticky Column Shadow */
+        .sticky-right {
+            box-shadow: -4px 0 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Button Hover Animations */
+        .btn-action {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        
+        .btn-edit {
+            color: #2563eb;
+            background: #eff6ff;
+            border: 1px solid #dbeafe;
+        }
+        
+        .btn-edit:hover {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+        }
+        
+        .btn-delete {
+            color: #dc2626;
+            background: #fef2f2;
+            border: 1px solid #fee2e2;
+        }
+        
+        .btn-delete:hover {
+            background: #dc2626;
+            color: white;
+            border-color: #dc2626;
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+        }
+
+        .btn-action i {
+            transition: transform 0.2s ease;
+        }
+        
+        .btn-action:hover i {
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans">
+    <!-- Navbar -->
+    <nav class="glass-nav text-white shadow-md sticky top-0 z-40">
+        <div class="max-w-[98%] mx-auto px-3 sm:px-6">
+            <div class="flex items-center justify-between h-14 md:h-16">
+                <div class="flex items-center space-x-2 md:space-x-3 min-w-0">
+                    <div class="bg-white p-1.5 md:p-2 rounded-lg shadow-inner shrink-0">
+                        <i class="lucide-droplets text-blue-600 w-5 h-5 md:w-6 md:h-6"></i>
+                    </div>
+                    <span class="font-extrabold text-sm sm:text-lg md:text-xl tracking-tight whitespace-nowrap truncate">水质微塑料 <span class="text-blue-200">管理系统</span></span>
+                </div>
+                <div class="flex items-center space-x-2 nav-buttons">
+                    <input type="file" id="importInput" accept=".xlsx, .xls, .json" class="hidden" onchange="handleImport(event)">
+                    <button onclick="triggerImport()" class="bg-white/10 hover:bg-white/20 text-white px-2.5 md:px-4 py-2 rounded-xl text-xs md:text-sm font-bold transition-all flex items-center border border-white/20 hover:border-white/40 shadow-sm active:scale-95 whitespace-nowrap shrink-0">
+                        <i class="lucide-upload mr-1 md:mr-2 w-4 h-4"></i> <span class="hidden sm:inline">导入数据</span><span class="sm:hidden">导入</span>
+                    </button>
+                    <button onclick="exportData()" class="bg-white/10 hover:bg-white/20 text-white px-2.5 md:px-4 py-2 rounded-xl text-xs md:text-sm font-bold transition-all flex items-center border border-white/20 hover:border-white/40 shadow-sm active:scale-95 whitespace-nowrap shrink-0">
+                        <i class="lucide-download mr-1 md:mr-2 w-4 h-4"></i> <span class="hidden sm:inline">导出 Excel</span><span class="sm:hidden">导出</span>
+                    </button>
+                    <div class="h-6 w-px bg-white/20 mx-0.5 md:mx-2 shrink-0"></div>
+                    <button onclick="resetData()" class="bg-rose-500/90 hover:bg-rose-500 text-white px-2.5 md:px-4 py-2 rounded-xl text-xs md:text-sm font-bold transition-all shadow-lg shadow-rose-500/20 flex items-center active:scale-95 whitespace-nowrap shrink-0">
+                        <i class="lucide-refresh-cw mr-1 md:mr-2 w-4 h-4"></i> <span>重置</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-[98%] mx-auto px-3 sm:px-6 py-6 md:py-8">
+        <!-- Dashboard Stats -->
+        <div class="grid grid-cols-3 md:grid-cols-3 gap-3 md:gap-8 mb-6 md:mb-10">
+            <div class="stats-card bg-white p-3 md:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row items-center justify-center md:justify-start text-center md:text-left gap-2 md:gap-5">
+                <div class="bg-blue-50 p-2 md:p-4 rounded-xl">
+                    <i class="lucide-database text-blue-500 w-5 h-5 md:w-8 md:h-8"></i>
+                </div>
+                <div>
+                    <div class="text-slate-500 text-[10px] md:text-xs font-bold uppercase tracking-wider">总数据量</div>
+                    <div class="text-xl md:text-4xl font-black text-slate-800 mt-0.5 md:mt-1" id="stat-total">0</div>
+                </div>
+            </div>
+            <div class="stats-card bg-white p-3 md:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row items-center justify-center md:justify-start text-center md:text-left gap-2 md:gap-5">
+                <div class="bg-emerald-50 p-2 md:p-4 rounded-xl">
+                    <i class="lucide-map-pin text-emerald-500 w-5 h-5 md:w-8 md:h-8"></i>
+                </div>
+                <div>
+                    <div class="text-slate-500 text-[10px] md:text-xs font-bold uppercase tracking-wider">涉及河流</div>
+                    <div class="text-xl md:text-4xl font-black text-slate-800 mt-0.5 md:mt-1" id="stat-rivers">0</div>
+                </div>
+            </div>
+            <div class="stats-card bg-white p-3 md:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row items-center justify-center md:justify-start text-center md:text-left gap-2 md:gap-5">
+                <div class="bg-orange-50 p-2 md:p-4 rounded-xl">
+                    <i class="lucide-waves text-orange-500 w-5 h-5 md:w-8 md:h-8"></i>
+                </div>
+                <div>
+                    <div class="text-slate-500 text-[10px] md:text-xs font-bold uppercase tracking-wider">平均丰度 (n/L)</div>
+                    <div class="text-xl md:text-4xl font-black text-slate-800 mt-0.5 md:mt-1" id="stat-abundance">0.00</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table Controls -->
+        <div class="flex flex-col md:flex-row justify-between items-stretch md:items-center mb-6 md:mb-8 gap-3 md:gap-6">
+            <div class="relative w-full md:w-[450px]">
+                <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-400">
+                    <i class="lucide-search w-5 h-5"></i>
+                </span>
+                <input type="text" id="search-input" oninput="handleSearch()" class="block w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl leading-5 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm" placeholder="快速查找河流名称、编号或采样时期...">
+            </div>
+            <button onclick="openModal()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-2xl font-black transition-all shadow-xl shadow-blue-600/20 flex items-center justify-center transform active:scale-95 group">
+                <i class="lucide-plus-circle mr-2 w-5 h-5 group-hover:rotate-90 transition-transform duration-300"></i> 新增观测记录
+            </button>
+        </div>
+
+        <!-- Data Table -->
+        <div class="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
+            <div class="desktop-table-wrap">
+            <div class="table-container overflow-x-auto">
+                <table class="custom-table min-w-full divide-y divide-slate-200 border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50/80 divide-x divide-slate-200">
+                            <th rowspan="2" class="px-4 py-4 text-center text-[11px] font-bold text-slate-500 uppercase tracking-wider">序号</th>
+                            <th rowspan="2" class="px-4 py-4 text-center text-[11px] font-bold text-slate-500 uppercase tracking-wider">采样时期</th>
+                            <th rowspan="2" class="px-4 py-4 text-center text-[11px] font-bold text-slate-500 uppercase tracking-wider">采样时间</th>
+                            <th rowspan="2" class="px-4 py-4 text-center text-[11px] font-bold text-slate-500 uppercase tracking-wider">河流名称</th>
+                            <th rowspan="2" class="px-4 py-4 text-center text-[11px] font-bold text-slate-500 uppercase tracking-wider">简称</th>
+                            <th rowspan="2" class="px-4 py-4 text-center text-[11px] font-bold text-slate-500 uppercase tracking-wider">编号</th>
+                            <th rowspan="2" class="px-4 py-4 text-center text-[11px] font-bold text-slate-500 uppercase tracking-wider">纬度</th>
+                            <th rowspan="2" class="px-4 py-4 text-center text-[11px] font-bold text-slate-500 uppercase tracking-wider">经度</th>
+                            <th colspan="5" class="px-4 py-2 text-center text-[11px] font-black text-blue-600 uppercase bg-blue-50/50 border-b border-slate-200 tracking-widest">塑料类型统计</th>
+                            <th colspan="6" class="px-4 py-2 text-center text-[11px] font-black text-rose-600 uppercase bg-rose-50/50 border-b border-slate-200 tracking-widest">颜色统计</th>
+                            <th colspan="8" class="px-4 py-2 text-center text-[11px] font-black text-emerald-600 uppercase bg-emerald-50/50 border-b border-slate-200 tracking-widest">微塑料粒径 (μm)</th>
+                            <th rowspan="2" class="px-4 py-4 text-center text-[11px] font-bold text-slate-900 uppercase tracking-wider">总量</th>
+                            <th rowspan="2" class="px-4 py-4 text-center text-[11px] font-bold text-slate-500 uppercase tracking-wider">容量(L)</th>
+                            <th rowspan="2" class="px-4 py-4 text-center text-[11px] font-bold text-blue-700 uppercase tracking-wider bg-blue-50/30">丰度</th>
+                            <th rowspan="2" class="px-4 py-4 text-center text-[11px] font-bold text-slate-900 uppercase tracking-wider sticky right-0 bg-slate-50 z-20 border-l border-slate-200 sticky-right min-w-[160px]">管理操作</th>
+                        </tr>
+                        <tr class="bg-slate-50/80 divide-x divide-slate-200">
+                            <!-- 类型统计 -->
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-blue-500 bg-blue-50/30">碎片</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-blue-500 bg-blue-50/30">纤维</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-blue-500 bg-blue-50/30">颗粒</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-blue-500 bg-blue-50/30">薄膜</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-blue-500 bg-blue-50/30">泡沫</th>
+                            <!-- 颜色统计 -->
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-rose-500 bg-rose-50/30">红色</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-rose-500 bg-rose-50/30">黑色</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-rose-500 bg-rose-50/30">白色</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-rose-500 bg-rose-50/30">透明</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-rose-500 bg-rose-50/30">蓝色</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-rose-500 bg-rose-50/30">其他</th>
+                            <!-- 粒径统计 -->
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-emerald-500 bg-emerald-50/30">0-50</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-emerald-500 bg-emerald-50/30">50-100</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-emerald-500 bg-emerald-50/30">100-300</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-emerald-500 bg-emerald-50/30">300-500</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-emerald-500 bg-emerald-50/30">500-1k</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-emerald-500 bg-emerald-50/30">1k-2k</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-emerald-500 bg-emerald-50/30">2k-3k</th>
+                            <th class="px-2 py-3 text-center text-[10px] font-bold text-emerald-500 bg-emerald-50/30">3k-5k</th>
+                        </tr>
+                    </thead>
+                    <tbody id="data-table-body" class="bg-white divide-y divide-slate-100 text-[12px]">
+                        <!-- Data rows will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+            </div>
+            <!-- Mobile Card List (rendered by JS, shown < 768px) -->
+            <div id="mobile-card-list" class="mobile-card-list p-3 pt-4"></div>
+            <!-- Pagination -->
+            <div class="bg-slate-50/50 px-4 md:px-8 py-4 md:py-5 flex flex-col sm:flex-row justify-between items-center gap-3 border-t border-slate-100">
+                <div id="table-info" class="text-xs md:text-sm font-bold text-slate-400 uppercase tracking-widest text-center sm:text-left"></div>
+                <div class="flex items-center justify-center space-x-3">
+                    <button onclick="prevPage()" class="px-4 sm:px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-600 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm flex items-center active:scale-95" id="btn-prev">
+                        <i class="lucide-arrow-left mr-2 w-4 h-4"></i> 上一页
+                    </button>
+                    <button onclick="nextPage()" class="px-4 sm:px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-600 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm flex items-center active:scale-95" id="btn-next">
+                        下一页 <i class="lucide-arrow-right ml-2 w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal for Create/Edit -->
+    <div id="modal" class="modal fixed w-full h-full top-0 left-0 flex items-center justify-center hidden z-50">
+        <div class="modal-overlay absolute w-full h-full bg-slate-900/60 backdrop-blur-sm"></div>
+        <div class="modal-container bg-white w-full max-w-5xl mx-auto rounded-3xl shadow-2xl z-50 overflow-hidden max-h-[95vh] flex flex-col">
+            <!-- Modal Header -->
+            <div class="px-4 md:px-8 py-4 md:py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
+                <div>
+                    <h3 class="text-lg md:text-2xl font-black text-slate-800" id="modal-title">新增数据</h3>
+                    <p class="text-slate-500 text-xs mt-1 font-medium hidden sm:block">请填写下方详细的水质观测指标数据</p>
+                </div>
+                <button onclick="closeModal()" class="p-2 hover:bg-white hover:shadow-sm rounded-xl transition-all text-slate-400 hover:text-slate-600 shrink-0">
+                    <i class="lucide-x w-6 h-6"></i>
+                </button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="overflow-y-auto flex-1 p-4 md:p-8 overscroll-contain">
+                <form id="data-form" onsubmit="handleSubmit(event)" class="space-y-6 md:space-y-10">
+                    <input type="hidden" id="field-id">
+
+                    <!-- 基本信息 -->
+                    <section>
+                        <div class="flex items-center space-x-2 mb-4 md:mb-6">
+                            <div class="w-1.5 h-6 bg-blue-500 rounded-full"></div>
+                            <h4 class="text-sm font-black text-slate-800 uppercase tracking-wider">观测基本信息</h4>
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-bold text-slate-500 uppercase ml-1">采样时期</label>
+                                <input type="text" id="field-period" class="block w-full bg-slate-50 border-none focus:ring-2 focus:ring-blue-500/20 rounded-xl py-2.5 px-4 text-sm font-medium transition-all" required placeholder="如：丰水期">
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-bold text-slate-500 uppercase ml-1">采样时间</label>
+                                <input type="text" id="field-sampling_time" class="block w-full bg-slate-50 border-none focus:ring-2 focus:ring-blue-500/20 rounded-xl py-2.5 px-4 text-sm font-medium transition-all" placeholder="如：23年7月">
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-bold text-slate-500 uppercase ml-1">河流名称</label>
+                                <input type="text" id="field-rive_name" class="block w-full bg-slate-50 border-none focus:ring-2 focus:ring-blue-500/20 rounded-xl py-2.5 px-4 text-sm font-medium transition-all" required placeholder="输入河流全称">
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-bold text-slate-500 uppercase ml-1">编号</label>
+                                <input type="text" id="field-river_number" class="block w-full bg-slate-50 border-none focus:ring-2 focus:ring-blue-500/20 rounded-xl py-2.5 px-4 text-sm font-medium transition-all" required placeholder="观测点编号">
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-bold text-slate-500 uppercase ml-1">纬度</label>
+                                <input type="number" step="0.000001" id="field-latitude" class="block w-full bg-slate-50 border-none focus:ring-2 focus:ring-blue-500/20 rounded-xl py-2.5 px-4 text-sm font-medium transition-all">
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-bold text-slate-500 uppercase ml-1">经度</label>
+                                <input type="number" step="0.000001" id="field-longitude" class="block w-full bg-slate-50 border-none focus:ring-2 focus:ring-blue-500/20 rounded-xl py-2.5 px-4 text-sm font-medium transition-all">
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-bold text-slate-500 uppercase ml-1">水样容量 (L)</label>
+                                <input type="number" step="0.1" id="field-water_volume" class="block w-full bg-slate-50 border-none focus:ring-2 focus:ring-blue-500/20 rounded-xl py-2.5 px-4 text-sm font-medium transition-all" required>
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-bold text-slate-500 uppercase ml-1">简称</label>
+                                <input type="text" id="field-rive_abbreviation" class="block w-full bg-slate-50 border-none focus:ring-2 focus:ring-blue-500/20 rounded-xl py-2.5 px-4 text-sm font-medium transition-all">
+                            </div>
+                        </div>
+                    </section>
+
+                    <div class="grid grid-cols-1 gap-8 md:gap-10 lg:grid-cols-2">
+                        <!-- 类型统计 -->
+                        <section>
+                            <div class="flex items-center space-x-2 mb-4 md:mb-6">
+                                <div class="w-1.5 h-6 bg-rose-400 rounded-full"></div>
+                                <h4 class="text-sm font-black text-slate-800 uppercase tracking-wider">塑料类型统计</h4>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 sm:gap-4">
+                                <div class="p-2.5 sm:p-4 bg-slate-50 rounded-2xl space-y-2">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase">碎片</label>
+                                    <input type="number" id="field-plastics_splinter_type" class="block w-full bg-white border-none rounded-lg py-1.5 px-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-rose-200 transition-all">
+                                </div>
+                                <div class="p-2.5 sm:p-4 bg-slate-50 rounded-2xl space-y-2">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase">纤维</label>
+                                    <input type="number" id="field-plastics_fibre_type" class="block w-full bg-white border-none rounded-lg py-1.5 px-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-rose-200 transition-all">
+                                </div>
+                                <div class="p-2.5 sm:p-4 bg-slate-50 rounded-2xl space-y-2">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase">颗粒</label>
+                                    <input type="number" id="field-plastics_grain_type" class="block w-full bg-white border-none rounded-lg py-1.5 px-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-rose-200 transition-all">
+                                </div>
+                                <div class="p-2.5 sm:p-4 bg-slate-50 rounded-2xl space-y-2">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase">薄膜</label>
+                                    <input type="number" id="field-plastics_membrane_type" class="block w-full bg-white border-none rounded-lg py-1.5 px-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-rose-200 transition-all">
+                                </div>
+                                <div class="p-2.5 sm:p-4 bg-slate-50 rounded-2xl space-y-2">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase">泡沫</label>
+                                    <input type="number" id="field-plastics_foam_type" class="block w-full bg-white border-none rounded-lg py-1.5 px-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-rose-200 transition-all">
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- 颜色统计 -->
+                        <section>
+                            <div class="flex items-center space-x-2 mb-4 md:mb-6">
+                                <div class="w-1.5 h-6 bg-emerald-400 rounded-full"></div>
+                                <h4 class="text-sm font-black text-slate-800 uppercase tracking-wider">颜色分布统计</h4>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 sm:gap-4">
+                                <div class="p-2.5 sm:p-4 bg-slate-50 rounded-2xl space-y-2">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase">红色</label>
+                                    <input type="number" id="field-plastics_red_color" class="block w-full bg-white border-none rounded-lg py-1.5 px-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-emerald-200 transition-all">
+                                </div>
+                                <div class="p-2.5 sm:p-4 bg-slate-50 rounded-2xl space-y-2">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase">黑色</label>
+                                    <input type="number" id="field-plastics_black_color" class="block w-full bg-white border-none rounded-lg py-1.5 px-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-emerald-200 transition-all">
+                                </div>
+                                <div class="p-2.5 sm:p-4 bg-slate-50 rounded-2xl space-y-2">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase">白色</label>
+                                    <input type="number" id="field-plastics_white_color" class="block w-full bg-white border-none rounded-lg py-1.5 px-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-emerald-200 transition-all">
+                                </div>
+                                <div class="p-2.5 sm:p-4 bg-slate-50 rounded-2xl space-y-2">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase">透明</label>
+                                    <input type="number" id="field-plastics_transparent_color" class="block w-full bg-white border-none rounded-lg py-1.5 px-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-emerald-200 transition-all">
+                                </div>
+                                <div class="p-2.5 sm:p-4 bg-slate-50 rounded-2xl space-y-2">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase">蓝色</label>
+                                    <input type="number" id="field-plastics_blue_color" class="block w-full bg-white border-none rounded-lg py-1.5 px-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-emerald-200 transition-all">
+                                </div>
+                                <div class="p-2.5 sm:p-4 bg-slate-50 rounded-2xl space-y-2">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase">其他</label>
+                                    <input type="number" id="field-plastics_other_color" class="block w-full bg-white border-none rounded-lg py-1.5 px-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-emerald-200 transition-all">
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <!-- 粒径统计 -->
+                    <section>
+                        <div class="flex items-center space-x-2 mb-4 md:mb-6">
+                            <div class="w-1.5 h-6 bg-amber-400 rounded-full"></div>
+                            <h4 class="text-sm font-black text-slate-800 uppercase tracking-wider">粒径统计 (μm)</h4>
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2 sm:gap-4">
+                            <div class="space-y-1.5"><label class="text-[10px] font-bold text-slate-400 ml-1">0-50</label><input type="number" id="field-fifty_radius" class="block w-full bg-slate-50 border-none rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-amber-200 transition-all"></div>
+                            <div class="space-y-1.5"><label class="text-[10px] font-bold text-slate-400 ml-1">50-100</label><input type="number" id="field-one_hundred_radius" class="block w-full bg-slate-50 border-none rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-amber-200 transition-all"></div>
+                            <div class="space-y-1.5"><label class="text-[10px] font-bold text-slate-400 ml-1">100-300</label><input type="number" id="field-three_hundred_radius" class="block w-full bg-slate-50 border-none rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-amber-200 transition-all"></div>
+                            <div class="space-y-1.5"><label class="text-[10px] font-bold text-slate-400 ml-1">300-500</label><input type="number" id="field-five_hundred_radius" class="block w-full bg-slate-50 border-none rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-amber-200 transition-all"></div>
+                            <div class="space-y-1.5"><label class="text-[10px] font-bold text-slate-400 ml-1">500-1k</label><input type="number" id="field-one_thousand_radius" class="block w-full bg-slate-50 border-none rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-amber-200 transition-all"></div>
+                            <div class="space-y-1.5"><label class="text-[10px] font-bold text-slate-400 ml-1">1k-2k</label><input type="number" id="field-two_thousand_radius" class="block w-full bg-slate-50 border-none rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-amber-200 transition-all"></div>
+                            <div class="space-y-1.5"><label class="text-[10px] font-bold text-slate-400 ml-1">2k-3k</label><input type="number" id="field-three_thousand_radius" class="block w-full bg-slate-50 border-none rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-amber-200 transition-all"></div>
+                            <div class="space-y-1.5"><label class="text-[10px] font-bold text-slate-400 ml-1">3k-5k</label><input type="number" id="field-five_thousand_radius" class="block w-full bg-slate-50 border-none rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-amber-200 transition-all"></div>
+                        </div>
+                    </section>
+
+                    <!-- 结果汇总 -->
+                    <div class="bg-blue-600 rounded-3xl p-4 sm:p-8 text-white shadow-xl shadow-blue-200 relative overflow-hidden">
+                        <div class="absolute -right-8 -bottom-8 opacity-10 transform rotate-12">
+                            <i class="lucide-bar-chart-2 w-48 h-48"></i>
+                        </div>
+                        <div class="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
+                            <div class="space-y-2">
+                                <label class="text-xs font-black uppercase tracking-widest text-blue-100">观测总量汇总 (n)</label>
+                                <input type="number" id="field-plastics_total" class="block w-full bg-white/10 border border-white/20 rounded-2xl py-3 md:py-4 px-4 md:px-6 text-lg md:text-2xl font-black focus:ring-4 focus:ring-white/20 transition-all placeholder-white/30" required>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-xs font-black uppercase tracking-widest text-blue-100">微塑料丰度指标 (n/L)</label>
+                                <input type="number" step="0.01" id="field-plastics_abundance" class="block w-full bg-white/10 border border-white/20 rounded-2xl py-3 md:py-4 px-4 md:px-6 text-lg md:text-2xl font-black focus:ring-4 focus:ring-white/20 transition-all placeholder-white/30" required>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="px-4 md:px-8 py-4 md:py-6 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 md:pb-6 border-t border-slate-100 bg-slate-50/50 flex flex-col-reverse sm:flex-row justify-end gap-3 shrink-0">
+                <button type="button" onclick="closeModal()" class="px-6 sm:px-8 py-3 bg-white text-slate-600 rounded-xl hover:bg-slate-100 font-bold transition-all border border-slate-100 shadow-sm">
+                    放弃修改
+                </button>
+                <button type="submit" form="data-form" class="px-8 sm:px-10 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all shadow-lg shadow-blue-200 transform active:scale-95">
+                    保存观测数据
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initial Data from SQL
+        const INITIAL_DATA = [
+            {id: 2, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y01', latitude: 29.090865, longitude: 117.781287, plastics_splinter_type: 272, plastics_fibre_type: 20, plastics_grain_type: 8, plastics_membrane_type: 200, plastics_foam_type: 0, plastics_red_color: 118, plastics_black_color: 86, plastics_white_color: 14, plastics_transparent_color: 280, plastics_blue_color: 0, plastics_other_color: 2, fifty_radius: 460, one_hundred_radius: 28, three_hundred_radius: 4, five_hundred_radius: 1, one_thousand_radius: 3, two_thousand_radius: 4, three_thousand_radius: 0, five_thousand_radius: 0, plastics_total: 500, water_volume: 4.5, plastics_abundance: 111.11},
+            {id: 3, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y02', latitude: 29.075808, longitude: 117.695057, plastics_splinter_type: 280, plastics_fibre_type: 40, plastics_grain_type: 4, plastics_membrane_type: 180, plastics_foam_type: 0, plastics_red_color: 149, plastics_black_color: 123, plastics_white_color: 108, plastics_transparent_color: 112, plastics_blue_color: 12, plastics_other_color: 0, fifty_radius: 428, one_hundred_radius: 28, three_hundred_radius: 20, five_hundred_radius: 12, one_thousand_radius: 8, two_thousand_radius: 0, three_thousand_radius: 4, five_thousand_radius: 4, plastics_total: 504, water_volume: 4.5, plastics_abundance: 112.00},
+            {id: 4, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y03', latitude: 29.016954, longitude: 117.579200, plastics_splinter_type: 410, plastics_fibre_type: 82, plastics_grain_type: 20, plastics_membrane_type: 760, plastics_foam_type: 0, plastics_red_color: 132, plastics_black_color: 324, plastics_white_color: 52, plastics_transparent_color: 718, plastics_blue_color: 40, plastics_other_color: 6, fifty_radius: 1080, one_hundred_radius: 104, three_hundred_radius: 36, five_hundred_radius: 24, one_thousand_radius: 16, two_thousand_radius: 8, three_thousand_radius: 0, five_thousand_radius: 4, plastics_total: 1272, water_volume: 4.5, plastics_abundance: 282.67},
+            {id: 5, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y04', latitude: 28.997003, longitude: 117.540283, plastics_splinter_type: 72, plastics_fibre_type: 76, plastics_grain_type: 28, plastics_membrane_type: 84, plastics_foam_type: 0, plastics_red_color: 30, plastics_black_color: 58, plastics_white_color: 8, plastics_transparent_color: 156, plastics_blue_color: 8, plastics_other_color: 0, fifty_radius: 64, one_hundred_radius: 32, three_hundred_radius: 28, five_hundred_radius: 24, one_thousand_radius: 60, two_thousand_radius: 24, three_thousand_radius: 16, five_thousand_radius: 16, plastics_total: 264, water_volume: 4.5, plastics_abundance: 58.67},
+            {id: 6, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y05', latitude: 28.975286, longitude: 117.251599, plastics_splinter_type: 55, plastics_fibre_type: 92, plastics_grain_type: 0, plastics_membrane_type: 48, plastics_foam_type: 0, plastics_red_color: 40, plastics_black_color: 64, plastics_white_color: 8, plastics_transparent_color: 71, plastics_blue_color: 0, plastics_other_color: 12, fifty_radius: 64, one_hundred_radius: 32, three_hundred_radius: 20, five_hundred_radius: 20, one_thousand_radius: 24, two_thousand_radius: 28, three_thousand_radius: 4, five_thousand_radius: 3, plastics_total: 195, water_volume: 4.5, plastics_abundance: 43.33},
+            {id: 7, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y06', latitude: 28.944433, longitude: 117.181349, plastics_splinter_type: 76, plastics_fibre_type: 22, plastics_grain_type: 0, plastics_membrane_type: 32, plastics_foam_type: 0, plastics_red_color: 32, plastics_black_color: 24, plastics_white_color: 4, plastics_transparent_color: 64, plastics_blue_color: 6, plastics_other_color: 0, fifty_radius: 56, one_hundred_radius: 20, three_hundred_radius: 20, five_hundred_radius: 12, one_thousand_radius: 8, two_thousand_radius: 9, three_thousand_radius: 4, five_thousand_radius: 1, plastics_total: 130, water_volume: 4.5, plastics_abundance: 28.89},
+            {id: 8, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y7-1', latitude: 28.842266, longitude: 116.948018, plastics_splinter_type: 38, plastics_fibre_type: 18, plastics_grain_type: 4, plastics_membrane_type: 96, plastics_foam_type: 0, plastics_red_color: 48, plastics_black_color: 44, plastics_white_color: 12, plastics_transparent_color: 48, plastics_blue_color: 4, plastics_other_color: 0, fifty_radius: 96, one_hundred_radius: 42, three_hundred_radius: 8, five_hundred_radius: 2, one_thousand_radius: 4, two_thousand_radius: 4, three_thousand_radius: 0, five_thousand_radius: 0, plastics_total: 156, water_volume: 4.5, plastics_abundance: 34.67},
+            {id: 9, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y7-2', latitude: 28.842236, longitude: 116.947932, plastics_splinter_type: 61, plastics_fibre_type: 44, plastics_grain_type: 4, plastics_membrane_type: 22, plastics_foam_type: 0, plastics_red_color: 24, plastics_black_color: 55, plastics_white_color: 15, plastics_transparent_color: 37, plastics_blue_color: 0, plastics_other_color: 0, fifty_radius: 80, one_hundred_radius: 0, three_hundred_radius: 16, five_hundred_radius: 8, one_thousand_radius: 8, two_thousand_radius: 15, three_thousand_radius: 2, five_thousand_radius: 2, plastics_total: 131, water_volume: 4.5, plastics_abundance: 29.11},
+            {id: 10, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y8', latitude: 28.846339, longitude: 116.960535, plastics_splinter_type: 81, plastics_fibre_type: 36, plastics_grain_type: 0, plastics_membrane_type: 23, plastics_foam_type: 0, plastics_red_color: 20, plastics_black_color: 64, plastics_white_color: 4, plastics_transparent_color: 48, plastics_blue_color: 4, plastics_other_color: 0, fifty_radius: 64, one_hundred_radius: 28, three_hundred_radius: 20, five_hundred_radius: 4, one_thousand_radius: 16, two_thousand_radius: 8, three_thousand_radius: 0, five_thousand_radius: 0, plastics_total: 140, water_volume: 4.5, plastics_abundance: 31.11},
+            {id: 11, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y9', latitude: 28.856527, longitude: 116.938535, plastics_splinter_type: 524, plastics_fibre_type: 60, plastics_grain_type: 0, plastics_membrane_type: 203, plastics_foam_type: 0, plastics_red_color: 88, plastics_black_color: 507, plastics_white_color: 32, plastics_transparent_color: 120, plastics_blue_color: 40, plastics_other_color: 0, fifty_radius: 628, one_hundred_radius: 96, three_hundred_radius: 25, five_hundred_radius: 13, one_thousand_radius: 9, two_thousand_radius: 8, three_thousand_radius: 3, five_thousand_radius: 5, plastics_total: 787, water_volume: 4.5, plastics_abundance: 174.89},
+            {id: 12, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y10', latitude: 28.855015, longitude: 116.866170, plastics_splinter_type: 201, plastics_fibre_type: 144, plastics_grain_type: 0, plastics_membrane_type: 200, plastics_foam_type: 0, plastics_red_color: 44, plastics_black_color: 185, plastics_white_color: 20, plastics_transparent_color: 272, plastics_blue_color: 24, plastics_other_color: 0, fifty_radius: 352, one_hundred_radius: 37, three_hundred_radius: 40, five_hundred_radius: 36, one_thousand_radius: 68, two_thousand_radius: 8, three_thousand_radius: 4, five_thousand_radius: 0, plastics_total: 545, water_volume: 4.5, plastics_abundance: 121.11},
+            {id: 13, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y11', latitude: 29.016462, longitude: 116.500218, plastics_splinter_type: 128, plastics_fibre_type: 45, plastics_grain_type: 8, plastics_membrane_type: 55, plastics_foam_type: 0, plastics_red_color: 100, plastics_black_color: 75, plastics_white_color: 0, plastics_transparent_color: 41, plastics_blue_color: 20, plastics_other_color: 0, fifty_radius: 156, one_hundred_radius: 39, three_hundred_radius: 16, five_hundred_radius: 19, one_thousand_radius: 4, two_thousand_radius: 2, three_thousand_radius: 0, five_thousand_radius: 0, plastics_total: 236, water_volume: 4.5, plastics_abundance: 52.44},
+            {id: 14, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y12', latitude: 28.985999, longitude: 116.495604, plastics_splinter_type: 62, plastics_fibre_type: 45, plastics_grain_type: 9, plastics_membrane_type: 152, plastics_foam_type: 0, plastics_red_color: 114, plastics_black_color: 85, plastics_white_color: 9, plastics_transparent_color: 40, plastics_blue_color: 16, plastics_other_color: 4, fifty_radius: 181, one_hundred_radius: 32, three_hundred_radius: 9, five_hundred_radius: 17, one_thousand_radius: 25, two_thousand_radius: 4, three_thousand_radius: 0, five_thousand_radius: 0, plastics_total: 268, water_volume: 4.5, plastics_abundance: 59.56},
+            {id: 15, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y13', latitude: 28.968085, longitude: 116.503902, plastics_splinter_type: 902, plastics_fibre_type: 184, plastics_grain_type: 32, plastics_membrane_type: 450, plastics_foam_type: 0, plastics_red_color: 532, plastics_black_color: 508, plastics_white_color: 0, plastics_transparent_color: 488, plastics_blue_color: 40, plastics_other_color: 0, fifty_radius: 1088, one_hundred_radius: 272, three_hundred_radius: 64, five_hundred_radius: 32, one_thousand_radius: 96, two_thousand_radius: 16, three_thousand_radius: 0, five_thousand_radius: 0, plastics_total: 1568, water_volume: 13.5, plastics_abundance: 116.15},
+            {id: 16, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y14', latitude: 29.005846, longitude: 116.593140, plastics_splinter_type: 366, plastics_fibre_type: 240, plastics_grain_type: 50, plastics_membrane_type: 424, plastics_foam_type: 0, plastics_red_color: 260, plastics_black_color: 440, plastics_white_color: 10, plastics_transparent_color: 360, plastics_blue_color: 10, plastics_other_color: 0, fifty_radius: 800, one_hundred_radius: 100, three_hundred_radius: 40, five_hundred_radius: 50, one_thousand_radius: 72, two_thousand_radius: 10, three_thousand_radius: 8, five_thousand_radius: 0, plastics_total: 1080, water_volume: 13.5, plastics_abundance: 80.00},
+            {id: 17, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y15', latitude: 29.128672, longitude: 116.571757, plastics_splinter_type: 458, plastics_fibre_type: 176, plastics_grain_type: 8, plastics_membrane_type: 288, plastics_foam_type: 0, plastics_red_color: 232, plastics_black_color: 292, plastics_white_color: 32, plastics_transparent_color: 362, plastics_blue_color: 8, plastics_other_color: 4, fifty_radius: 498, one_hundred_radius: 216, three_hundred_radius: 80, five_hundred_radius: 56, one_thousand_radius: 66, two_thousand_radius: 6, three_thousand_radius: 8, five_thousand_radius: 0, plastics_total: 930, water_volume: 13.5, plastics_abundance: 68.89},
+            {id: 18, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y16', latitude: 28.990088, longitude: 116.720907, plastics_splinter_type: 404, plastics_fibre_type: 284, plastics_grain_type: 8, plastics_membrane_type: 104, plastics_foam_type: 0, plastics_red_color: 232, plastics_black_color: 216, plastics_white_color: 48, plastics_transparent_color: 288, plastics_blue_color: 16, plastics_other_color: 0, fifty_radius: 364, one_hundred_radius: 108, three_hundred_radius: 220, five_hundred_radius: 78, one_thousand_radius: 14, two_thousand_radius: 16, three_thousand_radius: 0, five_thousand_radius: 0, plastics_total: 800, water_volume: 13.5, plastics_abundance: 59.26},
+            {id: 19, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y17', latitude: 28.970571, longitude: 116.701079, plastics_splinter_type: 958, plastics_fibre_type: 120, plastics_grain_type: 28, plastics_membrane_type: 126, plastics_foam_type: 0, plastics_red_color: 632, plastics_black_color: 288, plastics_white_color: 52, plastics_transparent_color: 252, plastics_blue_color: 8, plastics_other_color: 0, fifty_radius: 828, one_hundred_radius: 284, three_hundred_radius: 1, five_hundred_radius: 16, one_thousand_radius: 40, two_thousand_radius: 0, three_thousand_radius: 0, five_thousand_radius: 0, plastics_total: 1169, water_volume: 13.5, plastics_abundance: 86.59},
+            {id: 20, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y18', latitude: 28.870945, longitude: 116.607395, plastics_splinter_type: 658, plastics_fibre_type: 288, plastics_grain_type: 12, plastics_membrane_type: 144, plastics_foam_type: 0, plastics_red_color: 432, plastics_black_color: 320, plastics_white_color: 60, plastics_transparent_color: 292, plastics_blue_color: 0, plastics_other_color: 0, fifty_radius: 640, one_hundred_radius: 213, three_hundred_radius: 114, five_hundred_radius: 32, one_thousand_radius: 54, two_thousand_radius: 19, three_thousand_radius: 32, five_thousand_radius: 0, plastics_total: 1104, water_volume: 13.5, plastics_abundance: 81.78},
+            {id: 21, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '乐安河', rive_abbreviation: 'LA', river_number: 'Y19', latitude: 28.912362, longitude: 116.527710, plastics_splinter_type: 644, plastics_fibre_type: 224, plastics_grain_type: 32, plastics_membrane_type: 268, plastics_foam_type: 0, plastics_red_color: 304, plastics_black_color: 368, plastics_white_color: 12, plastics_transparent_color: 436, plastics_blue_color: 48, plastics_other_color: 0, fifty_radius: 612, one_hundred_radius: 256, three_hundred_radius: 176, five_hundred_radius: 16, one_thousand_radius: 64, two_thousand_radius: 32, three_thousand_radius: 8, five_thousand_radius: 4, plastics_total: 1168, water_volume: 13.5, plastics_abundance: 86.52},
+            {id: 22, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '信江', rive_abbreviation: 'XJ', river_number: 'Y20', latitude: 28.841088, longitude: 116.403788, plastics_splinter_type: 58, plastics_fibre_type: 40, plastics_grain_type: 0, plastics_membrane_type: 78, plastics_foam_type: 0, plastics_red_color: 56, plastics_black_color: 36, plastics_white_color: 0, plastics_transparent_color: 84, plastics_blue_color: 0, plastics_other_color: 0, fifty_radius: 78, one_hundred_radius: 28, three_hundred_radius: 32, five_hundred_radius: 8, one_thousand_radius: 30, two_thousand_radius: 0, three_thousand_radius: 0, five_thousand_radius: 0, plastics_total: 176, water_volume: 13.5, plastics_abundance: 13.04},
+            {id: 23, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '信江', rive_abbreviation: 'XJ', river_number: 'Y21', latitude: 28.641341, longitude: 116.643403, plastics_splinter_type: 458, plastics_fibre_type: 76, plastics_grain_type: 42, plastics_membrane_type: 284, plastics_foam_type: 0, plastics_red_color: 366, plastics_black_color: 274, plastics_white_color: 56, plastics_transparent_color: 158, plastics_blue_color: 4, plastics_other_color: 2, fifty_radius: 384, one_hundred_radius: 180, three_hundred_radius: 176, five_hundred_radius: 62, one_thousand_radius: 38, two_thousand_radius: 12, three_thousand_radius: 8, five_thousand_radius: 0, plastics_total: 860, water_volume: 13.5, plastics_abundance: 63.70},
+            {id: 24, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '赣江', rive_abbreviation: 'GJ', river_number: 'Y22', latitude: 27.861147, longitude: 115.437650, plastics_splinter_type: 178, plastics_fibre_type: 52, plastics_grain_type: 8, plastics_membrane_type: 78, plastics_foam_type: 0, plastics_red_color: 72, plastics_black_color: 48, plastics_white_color: 8, plastics_transparent_color: 156, plastics_blue_color: 32, plastics_other_color: 0, fifty_radius: 102, one_hundred_radius: 72, three_hundred_radius: 16, five_hundred_radius: 36, one_thousand_radius: 32, two_thousand_radius: 24, three_thousand_radius: 34, five_thousand_radius: 0, plastics_total: 316, water_volume: 13.5, plastics_abundance: 23.41},
+            {id: 25, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '赣江', rive_abbreviation: 'GJ', river_number: 'Y23', latitude: 27.881410, longitude: 115.450119, plastics_splinter_type: 134, plastics_fibre_type: 48, plastics_grain_type: 6, plastics_membrane_type: 30, plastics_foam_type: 0, plastics_red_color: 86, plastics_black_color: 62, plastics_white_color: 12, plastics_transparent_color: 58, plastics_blue_color: 0, plastics_other_color: 0, fifty_radius: 108, one_hundred_radius: 54, three_hundred_radius: 26, five_hundred_radius: 28, one_thousand_radius: 0, two_thousand_radius: 2, three_thousand_radius: 0, five_thousand_radius: 0, plastics_total: 218, water_volume: 13.5, plastics_abundance: 16.15},
+            {id: 26, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '赣江', rive_abbreviation: 'GJ', river_number: 'Y24', latitude: 28.007955, longitude: 115.465719, plastics_splinter_type: 156, plastics_fibre_type: 32, plastics_grain_type: 30, plastics_membrane_type: 32, plastics_foam_type: 0, plastics_red_color: 166, plastics_black_color: 64, plastics_white_color: 0, plastics_transparent_color: 20, plastics_blue_color: 0, plastics_other_color: 0, fifty_radius: 124, one_hundred_radius: 66, three_hundred_radius: 32, five_hundred_radius: 0, one_thousand_radius: 18, two_thousand_radius: 12, three_thousand_radius: 8, five_thousand_radius: 0, plastics_total: 260, water_volume: 13.5, plastics_abundance: 19.26},
+            {id: 27, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '赣江', rive_abbreviation: 'GJ', river_number: 'Y25', latitude: 28.178554, longitude: 115.719312, plastics_splinter_type: 366, plastics_fibre_type: 188, plastics_grain_type: 26, plastics_membrane_type: 76, plastics_foam_type: 0, plastics_red_color: 336, plastics_black_color: 124, plastics_white_color: 14, plastics_transparent_color: 146, plastics_blue_color: 36, plastics_other_color: 0, fifty_radius: 352, one_hundred_radius: 188, three_hundred_radius: 68, five_hundred_radius: 22, one_thousand_radius: 6, two_thousand_radius: 8, three_thousand_radius: 10, five_thousand_radius: 2, plastics_total: 656, water_volume: 13.5, plastics_abundance: 48.59},
+            {id: 28, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '赣江', rive_abbreviation: 'GJ', river_number: 'Y26', latitude: 28.173175, longitude: 115.766208, plastics_splinter_type: 400, plastics_fibre_type: 164, plastics_grain_type: 68, plastics_membrane_type: 146, plastics_foam_type: 0, plastics_red_color: 268, plastics_black_color: 166, plastics_white_color: 44, plastics_transparent_color: 288, plastics_blue_color: 12, plastics_other_color: 0, fifty_radius: 324, one_hundred_radius: 128, three_hundred_radius: 136, five_hundred_radius: 54, one_thousand_radius: 78, two_thousand_radius: 44, three_thousand_radius: 14, five_thousand_radius: 0, plastics_total: 778, water_volume: 13.5, plastics_abundance: 57.63},
+            {id: 29, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '赣江', rive_abbreviation: 'GJ', river_number: 'Y27', latitude: 28.226972, longitude: 115.809498, plastics_splinter_type: 546, plastics_fibre_type: 86, plastics_grain_type: 18, plastics_membrane_type: 204, plastics_foam_type: 0, plastics_red_color: 278, plastics_black_color: 318, plastics_white_color: 26, plastics_transparent_color: 216, plastics_blue_color: 16, plastics_other_color: 0, fifty_radius: 396, one_hundred_radius: 238, three_hundred_radius: 96, five_hundred_radius: 76, one_thousand_radius: 24, two_thousand_radius: 22, three_thousand_radius: 2, five_thousand_radius: 0, plastics_total: 854, water_volume: 13.5, plastics_abundance: 63.26},
+            {id: 30, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '赣江', rive_abbreviation: 'GJ', river_number: 'Y28', latitude: 28.472703, longitude: 115.844969, plastics_splinter_type: 980, plastics_fibre_type: 48, plastics_grain_type: 16, plastics_membrane_type: 206, plastics_foam_type: 0, plastics_red_color: 108, plastics_black_color: 824, plastics_white_color: 48, plastics_transparent_color: 226, plastics_blue_color: 42, plastics_other_color: 2, fifty_radius: 672, one_hundred_radius: 204, three_hundred_radius: 224, five_hundred_radius: 114, one_thousand_radius: 6, two_thousand_radius: 14, three_thousand_radius: 12, five_thousand_radius: 4, plastics_total: 1250, water_volume: 13.5, plastics_abundance: 92.59},
+            {id: 31, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '赣江', rive_abbreviation: 'GJ', river_number: 'Y29', latitude: 28.641368, longitude: 115.900818, plastics_splinter_type: 3446, plastics_fibre_type: 144, plastics_grain_type: 44, plastics_membrane_type: 164, plastics_foam_type: 0, plastics_red_color: 126, plastics_black_color: 3512, plastics_white_color: 54, plastics_transparent_color: 106, plastics_blue_color: 0, plastics_other_color: 0, fifty_radius: 2886, one_hundred_radius: 582, three_hundred_radius: 342, five_hundred_radius: 26, one_thousand_radius: 38, two_thousand_radius: 12, three_thousand_radius: 12, five_thousand_radius: 0, plastics_total: 3898, water_volume: 13.5, plastics_abundance: 288.74},
+            {id: 32, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '赣江北支', rive_abbreviation: 'GJ', river_number: 'Y30', latitude: 28.773335, longitude: 115.956310, plastics_splinter_type: 426, plastics_fibre_type: 86, plastics_grain_type: 32, plastics_membrane_type: 206, plastics_foam_type: 0, plastics_red_color: 324, plastics_black_color: 182, plastics_white_color: 42, plastics_transparent_color: 178, plastics_blue_color: 24, plastics_other_color: 0, fifty_radius: 204, one_hundred_radius: 246, three_hundred_radius: 184, five_hundred_radius: 68, one_thousand_radius: 20, two_thousand_radius: 12, three_thousand_radius: 16, five_thousand_radius: 0, plastics_total: 750, water_volume: 13.5, plastics_abundance: 55.56},
+            {id: 33, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '赣江北支', rive_abbreviation: 'GJ', river_number: 'Y31', latitude: 28.839321, longitude: 116.003627, plastics_splinter_type: 342, plastics_fibre_type: 14, plastics_grain_type: 8, plastics_membrane_type: 244, plastics_foam_type: 0, plastics_red_color: 124, plastics_black_color: 88, plastics_white_color: 26, plastics_transparent_color: 370, plastics_blue_color: 8, plastics_other_color: 0, fifty_radius: 252, one_hundred_radius: 148, three_hundred_radius: 154, five_hundred_radius: 36, one_thousand_radius: 14, two_thousand_radius: 8, three_thousand_radius: 4, five_thousand_radius: 0, plastics_total: 616, water_volume: 13.5, plastics_abundance: 45.63},
+            {id: 34, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '赣江北支', rive_abbreviation: 'GJ', river_number: 'Y32', latitude: 29.066840, longitude: 116.030479, plastics_splinter_type: 874, plastics_fibre_type: 36, plastics_grain_type: 18, plastics_membrane_type: 426, plastics_foam_type: 0, plastics_red_color: 742, plastics_black_color: 324, plastics_white_color: 6, plastics_transparent_color: 246, plastics_blue_color: 36, plastics_other_color: 0, fifty_radius: 628, one_hundred_radius: 336, three_hundred_radius: 214, five_hundred_radius: 146, one_thousand_radius: 8, two_thousand_radius: 22, three_thousand_radius: 0, five_thousand_radius: 0, plastics_total: 1354, water_volume: 13.5, plastics_abundance: 100.30},
+            {id: 35, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '赣江南支', rive_abbreviation: 'GJ', river_number: 'Y33', latitude: 28.727272, longitude: 115.986988, plastics_splinter_type: 242, plastics_fibre_type: 108, plastics_grain_type: 24, plastics_membrane_type: 964, plastics_foam_type: 0, plastics_red_color: 174, plastics_black_color: 264, plastics_white_color: 12, plastics_transparent_color: 874, plastics_blue_color: 14, plastics_other_color: 0, fifty_radius: 554, one_hundred_radius: 314, three_hundred_radius: 318, five_hundred_radius: 86, one_thousand_radius: 30, two_thousand_radius: 22, three_thousand_radius: 14, five_thousand_radius: 0, plastics_total: 1338, water_volume: 13.5, plastics_abundance: 99.11},
+            {id: 36, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '赣江南支', rive_abbreviation: 'GJ', river_number: 'Y34', latitude: 28.727072, longitude: 116.033902, plastics_splinter_type: 284, plastics_fibre_type: 112, plastics_grain_type: 188, plastics_membrane_type: 926, plastics_foam_type: 0, plastics_red_color: 372, plastics_black_color: 784, plastics_white_color: 64, plastics_transparent_color: 252, plastics_blue_color: 32, plastics_other_color: 6, fifty_radius: 694, one_hundred_radius: 266, three_hundred_radius: 366, five_hundred_radius: 54, one_thousand_radius: 28, two_thousand_radius: 26, three_thousand_radius: 44, five_thousand_radius: 32, plastics_total: 1510, water_volume: 13.5, plastics_abundance: 111.85},
+            {id: 37, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '抚河', rive_abbreviation: 'FH', river_number: 'Y35', latitude: 28.185460, longitude: 116.171022, plastics_splinter_type: 364, plastics_fibre_type: 32, plastics_grain_type: 6, plastics_membrane_type: 284, plastics_foam_type: 0, plastics_red_color: 276, plastics_black_color: 142, plastics_white_color: 26, plastics_transparent_color: 206, plastics_blue_color: 36, plastics_other_color: 0, fifty_radius: 284, one_hundred_radius: 214, three_hundred_radius: 106, five_hundred_radius: 42, one_thousand_radius: 36, two_thousand_radius: 4, three_thousand_radius: 0, five_thousand_radius: 0, plastics_total: 686, water_volume: 13.5, plastics_abundance: 50.81},
+            {id: 38, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '抚河', rive_abbreviation: 'FH', river_number: 'Y36', latitude: 28.336358, longitude: 116.081319, plastics_splinter_type: 528, plastics_fibre_type: 146, plastics_grain_type: 34, plastics_membrane_type: 108, plastics_foam_type: 0, plastics_red_color: 346, plastics_black_color: 180, plastics_white_color: 22, plastics_transparent_color: 238, plastics_blue_color: 18, plastics_other_color: 12, fifty_radius: 214, one_hundred_radius: 318, three_hundred_radius: 84, five_hundred_radius: 78, one_thousand_radius: 34, two_thousand_radius: 32, three_thousand_radius: 44, five_thousand_radius: 12, plastics_total: 816, water_volume: 13.5, plastics_abundance: 60.44},
+            {id: 39, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '抚河', rive_abbreviation: 'FH', river_number: 'Y37', latitude: 28.498932, longitude: 116.099230, plastics_splinter_type: 232, plastics_fibre_type: 124, plastics_grain_type: 26, plastics_membrane_type: 88, plastics_foam_type: 0, plastics_red_color: 224, plastics_black_color: 86, plastics_white_color: 32, plastics_transparent_color: 120, plastics_blue_color: 6, plastics_other_color: 2, fifty_radius: 98, one_hundred_radius: 166, three_hundred_radius: 42, five_hundred_radius: 74, one_thousand_radius: 24, two_thousand_radius: 50, three_thousand_radius: 8, five_thousand_radius: 8, plastics_total: 470, water_volume: 13.5, plastics_abundance: 34.81},
+            {id: 40, period: '丰水期', sampling_time: '23年7月底8月', rive_name: '抚河', rive_abbreviation: 'FH', river_number: 'Y38', latitude: 28.582336, longitude: 116.026712, plastics_splinter_type: 224, plastics_fibre_type: 32, plastics_grain_type: 0, plastics_membrane_type: 88, plastics_foam_type: 0, plastics_red_color: 204, plastics_black_color: 32, plastics_white_color: 4, plastics_transparent_color: 100, plastics_blue_color: 0, plastics_other_color: 4, fifty_radius: 144, one_hundred_radius: 114, three_hundred_radius: 54, five_hundred_radius: 12, one_thousand_radius: 12, two_thousand_radius: 4, three_thousand_radius: 0, five_thousand_radius: 4, plastics_total: 344, water_volume: 13.5, plastics_abundance: 25.48},
+        ];
+
+        // State Management
+        let data = [];
+        let filteredData = [];
+        let currentPage = 1;
+        const itemsPerPage = 10;
+
+        // Initialize App
+        function init() {
+            const savedData = localStorage.getItem('water_data');
+            if (savedData) {
+                data = JSON.parse(savedData);
+            } else {
+                data = [...INITIAL_DATA];
+                saveToLocalStorage();
+            }
+            filteredData = [...data];
+            updateStats();
+            renderTable();
+        }
+
+        function saveToLocalStorage() {
+            localStorage.setItem('water_data', JSON.stringify(data));
+        }
+
+        function updateStats() {
+            document.getElementById('stat-total').innerText = data.length;
+            const uniqueRivers = new Set(data.map(item => item.rive_name)).size;
+            document.getElementById('stat-rivers').innerText = uniqueRivers;
+            const avgAbundance = data.length > 0 
+                ? (data.reduce((acc, curr) => acc + parseFloat(curr.plastics_abundance || 0), 0) / data.length).toFixed(2)
+                : '0.00';
+            document.getElementById('stat-abundance').innerText = avgAbundance;
+        }
+
+        // Table Operations
+        function renderTable() {
+            const tbody = document.getElementById('data-table-body');
+            tbody.innerHTML = '';
+
+            const start = (currentPage - 1) * itemsPerPage;
+            const end = start + itemsPerPage;
+            const pageData = filteredData.slice(start, end);
+
+            pageData.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50/80 transition-colors group';
+                tr.innerHTML = `
+                    <td class="px-4 py-3 text-center text-slate-500 font-medium border-r border-slate-50">${start + index + 1}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-slate-700">${item.period || '-'}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-slate-500 text-[11px]">${item.sampling_time || '-'}</td>
+                    <td class="px-4 py-3 whitespace-nowrap font-bold text-slate-800">${item.rive_name || '-'}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-slate-600">${item.rive_abbreviation || '-'}</td>
+                    <td class="px-4 py-3 whitespace-nowrap font-mono text-slate-500">${item.river_number || '-'}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-slate-500">${item.latitude || '-'}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-slate-500">${item.longitude || '-'}</td>
+                    <!-- 类型统计 -->
+                    <td class="px-2 py-3 text-center bg-blue-50/10 text-slate-700">${item.plastics_splinter_type ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-blue-50/10 text-slate-700">${item.plastics_fibre_type ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-blue-50/10 text-slate-700">${item.plastics_grain_type ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-blue-50/10 text-slate-700">${item.plastics_membrane_type ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-blue-50/10 text-slate-700">${item.plastics_foam_type ?? 0}</td>
+                    <!-- 颜色统计 -->
+                    <td class="px-2 py-3 text-center bg-rose-50/10 text-slate-700">${item.plastics_red_color ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-rose-50/10 text-slate-700">${item.plastics_black_color ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-rose-50/10 text-slate-700">${item.plastics_white_color ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-rose-50/10 text-slate-700">${item.plastics_transparent_color ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-rose-50/10 text-slate-700">${item.plastics_blue_color ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-rose-50/10 text-slate-700">${item.plastics_other_color ?? 0}</td>
+                    <!-- 粒径统计 -->
+                    <td class="px-2 py-3 text-center bg-emerald-50/10 text-slate-700">${item.fifty_radius ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-emerald-50/10 text-slate-700">${item.one_hundred_radius ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-emerald-50/10 text-slate-700">${item.three_hundred_radius ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-emerald-50/10 text-slate-700">${item.five_hundred_radius ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-emerald-50/10 text-slate-700">${item.one_thousand_radius ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-emerald-50/10 text-slate-700">${item.two_thousand_radius ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-emerald-50/10 text-slate-700">${item.three_thousand_radius ?? 0}</td>
+                    <td class="px-2 py-3 text-center bg-emerald-50/10 text-slate-700">${item.five_thousand_radius ?? 0}</td>
+                    <td class="px-4 py-3 text-center font-black text-slate-900">${item.plastics_total ?? 0}</td>
+                    <td class="px-4 py-3 text-center text-slate-600">${item.water_volume ?? 0}</td>
+                    <td class="px-4 py-3 text-center font-black text-blue-600 bg-blue-50/30">${item.plastics_abundance ?? 0}</td>
+                    <td class="px-4 py-3 sticky right-0 bg-white z-10 border-l border-slate-100 sticky-right group-hover:bg-slate-50 transition-colors">
+                        <div class="flex items-center justify-center space-x-2">
+                            <button onclick="editItem(${item.id})" class="btn-action btn-edit px-3 py-1.5 rounded-lg flex items-center text-[11px] font-bold tracking-wide" title="编辑">
+                                <i class="lucide-edit-2 w-3.5 h-3.5 mr-1.5"></i>
+                                修改
+                            </button>
+                            <button onclick="deleteItem(${item.id})" class="btn-action btn-delete px-3 py-1.5 rounded-lg flex items-center text-[11px] font-bold tracking-wide" title="删除">
+                                <i class="lucide-trash-2 w-3.5 h-3.5 mr-1.5"></i>
+                                删除
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Update Info
+            renderMobileCards(pageData, start);
+            document.getElementById('table-info').innerText = `显示 ${start + 1} 到 ${Math.min(end, filteredData.length)} 条，共 ${filteredData.length} 条`;
+            document.getElementById('btn-prev').disabled = currentPage === 1;
+            document.getElementById('btn-next').disabled = end >= filteredData.length;
+        }
+
+        // Mobile Card View (shown on screens < 768px)
+        function renderMobileCards(pageData, start) {
+            const wrap = document.getElementById('mobile-card-list');
+            if (!wrap) return;
+            wrap.innerHTML = '';
+
+            const metricCell = (label, val, colorCls) => `
+                <div class="bg-slate-50 rounded-lg py-1.5">
+                    <div class="text-[10px] font-bold text-slate-400">${label}</div>
+                    <div class="text-[13px] font-black ${colorCls}">${val ?? 0}</div>
+                </div>`;
+
+            pageData.forEach((item, index) => {
+                const typeCells = [
+                    ['碎片', item.plastics_splinter_type], ['纤维', item.plastics_fibre_type],
+                    ['颗粒', item.plastics_grain_type], ['薄膜', item.plastics_membrane_type],
+                    ['泡沫', item.plastics_foam_type]
+                ].map(([l, v]) => metricCell(l, v, 'text-blue-600')).join('');
+
+                const colorCells = [
+                    ['红', item.plastics_red_color], ['黑', item.plastics_black_color],
+                    ['白', item.plastics_white_color], ['透明', item.plastics_transparent_color],
+                    ['蓝', item.plastics_blue_color], ['其他', item.plastics_other_color]
+                ].map(([l, v]) => metricCell(l, v, 'text-rose-500')).join('');
+
+                const radiusCells = [
+                    ['0-50', item.fifty_radius], ['50-100', item.one_hundred_radius],
+                    ['100-300', item.three_hundred_radius], ['300-500', item.five_hundred_radius],
+                    ['500-1k', item.one_thousand_radius], ['1k-2k', item.two_thousand_radius],
+                    ['2k-3k', item.three_thousand_radius], ['3k-5k', item.five_thousand_radius]
+                ].map(([l, v]) => metricCell(l, v, 'text-emerald-600')).join('');
+
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden mb-3';
+                card.innerHTML = `
+                    <div class="px-4 py-3 flex items-center justify-between bg-gradient-to-r from-blue-50/70 to-slate-50 border-b border-slate-100">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="shrink-0 inline-flex px-2 py-0.5 rounded-md bg-blue-600 text-white text-[10px] font-black">${item.river_number || '-'}</span>
+                            <span class="font-black text-slate-800 text-[15px] truncate">${item.rive_name || '-'}</span>
+                        </div>
+                        <span class="shrink-0 text-[11px] font-bold text-slate-400">${item.period || ''}${item.sampling_time ? ' · ' + item.sampling_time : ''}</span>
+                    </div>
+                    <div class="grid grid-cols-3 divide-x divide-slate-100 text-center">
+                        <div class="py-2.5">
+                            <div class="text-[10px] font-bold text-slate-400">总量 (n)</div>
+                            <div class="text-lg font-black text-slate-800">${item.plastics_total ?? 0}</div>
+                        </div>
+                        <div class="py-2.5">
+                            <div class="text-[10px] font-bold text-slate-400">容量 (L)</div>
+                            <div class="text-lg font-black text-slate-800">${item.water_volume ?? 0}</div>
+                        </div>
+                        <div class="py-2.5 bg-blue-50/40">
+                            <div class="text-[10px] font-bold text-blue-400">丰度 (n/L)</div>
+                            <div class="text-lg font-black text-blue-600">${item.plastics_abundance ?? 0}</div>
+                        </div>
+                    </div>
+                    <details class="border-t border-slate-100">
+                        <summary class="px-4 py-2.5 text-[12px] font-black text-blue-600 flex items-center justify-center select-none">
+                            展开明细 <i class="lucide-chevron-down w-4 h-4 ml-1 details-chevron transition-transform duration-200"></i>
+                        </summary>
+                        <div class="px-4 pb-4 space-y-3">
+                            <div>
+                                <div class="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">塑料类型</div>
+                                <div class="grid grid-cols-5 gap-1.5">${typeCells}</div>
+                            </div>
+                            <div>
+                                <div class="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">颜色分布</div>
+                                <div class="grid grid-cols-6 gap-1.5">${colorCells}</div>
+                            </div>
+                            <div>
+                                <div class="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">粒径 (μm)</div>
+                                <div class="grid grid-cols-4 gap-1.5">${radiusCells}</div>
+                            </div>
+                            <div class="flex items-center gap-1.5 text-[11px] text-slate-400 pt-1">
+                                <i class="lucide-map-pin w-3.5 h-3.5"></i>
+                                <span>${item.latitude ?? '-'} , ${item.longitude ?? '-'}</span>
+                                <span class="ml-auto text-slate-300">#${start + index + 1}</span>
+                            </div>
+                        </div>
+                    </details>
+                    <div class="grid grid-cols-2 border-t border-slate-100">
+                        <button onclick="editItem(${item.id})" class="btn-action btn-edit py-2.5 flex items-center justify-center text-[12px] font-bold rounded-none border-r border-slate-100">
+                            <i class="lucide-edit-2 w-4 h-4 mr-1.5"></i> 修改
+                        </button>
+                        <button onclick="deleteItem(${item.id})" class="btn-action btn-delete py-2.5 flex items-center justify-center text-[12px] font-bold rounded-none">
+                            <i class="lucide-trash-2 w-4 h-4 mr-1.5"></i> 删除
+                        </button>
+                    </div>
+                `;
+                wrap.appendChild(card);
+            });
+
+            if (pageData.length === 0) {
+                wrap.innerHTML = '<div class="text-center text-slate-400 text-sm font-bold py-10">暂无数据</div>';
+            }
+        }
+
+        function handleSearch() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            filteredData = data.filter(item => 
+                (item.rive_name || '').toLowerCase().includes(query) ||
+                (item.river_number || '').toLowerCase().includes(query) ||
+                (item.period || '').toLowerCase().includes(query)
+            );
+            currentPage = 1;
+            renderTable();
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                renderTable();
+            }
+        }
+
+        function nextPage() {
+            if (currentPage * itemsPerPage < filteredData.length) {
+                currentPage++;
+                renderTable();
+            }
+        }
+
+        // CRUD Operations
+        function deleteItem(id) {
+            if (confirm('确定要删除这条记录吗？')) {
+                data = data.filter(item => item.id !== id);
+                saveToLocalStorage();
+                handleSearch();
+                updateStats();
+            }
+        }
+
+        function editItem(id) {
+            const item = data.find(i => i.id === id);
+            if (!item) return;
+
+            document.getElementById('modal-title').innerText = '编辑数据';
+            document.getElementById('field-id').value = item.id;
+            
+            // Fill all fields
+            const fields = [
+                'period', 'sampling_time', 'rive_name', 'rive_abbreviation', 'river_number', 
+                'latitude', 'longitude', 'plastics_total', 'water_volume', 'plastics_abundance',
+                'plastics_splinter_type', 'plastics_fibre_type', 'plastics_grain_type', 
+                'plastics_membrane_type', 'plastics_foam_type', 'plastics_red_color',
+                'plastics_black_color', 'plastics_white_color', 'plastics_transparent_color',
+                'plastics_blue_color', 'plastics_other_color', 'fifty_radius',
+                'one_hundred_radius', 'three_hundred_radius', 'five_hundred_radius',
+                'one_thousand_radius', 'two_thousand_radius', 'three_thousand_radius',
+                'five_thousand_radius'
+            ];
+
+            fields.forEach(field => {
+                const el = document.getElementById(`field-${field}`);
+                if (el) el.value = item[field] || (el.type === 'number' ? 0 : '');
+            });
+
+            openModal();
+        }
+
+        function handleSubmit(event) {
+            event.preventDefault();
+            const id = document.getElementById('field-id').value;
+            
+            const newItem = {
+                id: id ? parseInt(id) : Date.now()
+            };
+
+            const fields = [
+                'period', 'sampling_time', 'rive_name', 'rive_abbreviation', 'river_number', 
+                'latitude', 'longitude', 'plastics_total', 'water_volume', 'plastics_abundance',
+                'plastics_splinter_type', 'plastics_fibre_type', 'plastics_grain_type', 
+                'plastics_membrane_type', 'plastics_foam_type', 'plastics_red_color',
+                'plastics_black_color', 'plastics_white_color', 'plastics_transparent_color',
+                'plastics_blue_color', 'plastics_other_color', 'fifty_radius',
+                'one_hundred_radius', 'three_hundred_radius', 'five_hundred_radius',
+                'one_thousand_radius', 'two_thousand_radius', 'three_thousand_radius',
+                'five_thousand_radius'
+            ];
+
+            fields.forEach(field => {
+                const el = document.getElementById(`field-${field}`);
+                if (el) {
+                    newItem[field] = el.type === 'number' ? parseFloat(el.value || 0) : el.value;
+                }
+            });
+
+            if (id) {
+                const index = data.findIndex(i => i.id === parseInt(id));
+                data[index] = newItem;
+            } else {
+                data.unshift(newItem);
+            }
+
+            saveToLocalStorage();
+            closeModal();
+            handleSearch();
+            updateStats();
+        }
+
+        // Modal Logic
+        function openModal() {
+            document.getElementById('modal').classList.remove('hidden');
+            document.body.classList.add('modal-active');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+            document.body.classList.remove('modal-active');
+            document.getElementById('data-form').reset();
+            document.getElementById('field-id').value = '';
+            document.getElementById('modal-title').innerText = '新增数据';
+        }
+
+        // Utilities
+        function triggerImport() {
+            document.getElementById('importInput').click();
+        }
+
+        async function handleImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            const fileName = file.name.toLowerCase();
+
+            reader.onload = async (e) => {
+                try {
+                    let importedData = [];
+                    if (fileName.endsWith('.json')) {
+                        importedData = JSON.parse(e.target.result);
+                    } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+                        if (typeof XLSX === 'undefined') {
+                            alert('Excel 解析库尚未加载，请稍后再试。');
+                            return;
+                        }
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const rawData = XLSX.utils.sheet_to_json(worksheet);
+
+                        // Map headers back
+                        const reverseHeadersMap = {
+                            '采样时期': 'period',
+                            '采样时间': 'sampling_time',
+                            '河流名称': 'rive_name',
+                            '河流简称': 'rive_abbreviation',
+                            '河流编号': 'river_number',
+                            '纬度': 'latitude',
+                            '经度': 'longitude',
+                            '塑料碎片类型': 'plastics_splinter_type',
+                            '塑料纤维类型': 'plastics_fibre_type',
+                            '塑料颗粒类型': 'plastics_grain_type',
+                            '塑料薄膜类型': 'plastics_membrane_type',
+                            '塑料泡沫类型': 'plastics_foam_type',
+                            '红色塑料': 'plastics_red_color',
+                            '黑色塑料': 'plastics_black_color',
+                            '白色塑料': 'plastics_white_color',
+                            '透明塑料': 'plastics_transparent_color',
+                            '蓝色塑料': 'plastics_blue_color',
+                            '其他颜色塑料': 'plastics_other_color',
+                            '微塑料粒径(0-50)': 'fifty_radius',
+                            '微塑料粒径(50-100)': 'one_hundred_radius',
+                            '微塑料粒径(100-300)': 'three_hundred_radius',
+                            '微塑料粒径(300-500)': 'five_hundred_radius',
+                            '微塑料粒径(500-1000)': 'one_thousand_radius',
+                            '微塑料粒径(1000-2000)': 'two_thousand_radius',
+                            '微塑料粒径(2000-3000)': 'three_thousand_radius',
+                            '微塑料粒径(3000-5000)': 'five_thousand_radius',
+                            '微塑料总量': 'plastics_total',
+                            '水样容量(L)': 'water_volume',
+                            '微塑料丰度(n/l)': 'plastics_abundance',
+                            '微塑料丰度': 'plastics_abundance'
+                        };
+
+                        importedData = rawData.map(row => {
+                            const item = {};
+                            Object.keys(row).forEach(header => {
+                                const key = reverseHeadersMap[header.trim()];
+                                if (key) {
+                                    let value = row[header];
+                                    // Basic type conversion
+                                    if (['latitude', 'longitude', 'plastics_splinter_type', 'plastics_fibre_type', 'plastics_grain_type', 'plastics_membrane_type', 'plastics_foam_type', 'plastics_red_color', 'plastics_black_color', 'plastics_white_color', 'plastics_transparent_color', 'plastics_blue_color', 'plastics_other_color', 'fifty_radius', 'one_hundred_radius', 'three_hundred_radius', 'five_hundred_radius', 'one_thousand_radius', 'two_thousand_radius', 'three_thousand_radius', 'five_thousand_radius', 'plastics_total', 'water_volume', 'plastics_abundance'].includes(key)) {
+                                        value = parseFloat(value) || 0;
+                                    }
+                                    item[key] = value;
+                                }
+                            });
+                            return item;
+                        });
+                    }
+
+                    if (importedData.length === 0) {
+                        alert('未在文件中找到有效数据。');
+                        return;
+                    }
+
+                    if (confirm(`成功解析 ${importedData.length} 条数据。是否要追加到当前数据中？\n(取消将替换所有当前数据)`)) {
+                        // Append
+                        const maxId = data.length > 0 ? Math.max(...data.map(d => d.id)) : 0;
+                        const newData = importedData.map((d, i) => ({ ...d, id: maxId + i + 1 }));
+                        data = [...data, ...newData];
+                    } else {
+                        // Replace
+                        data = importedData.map((d, i) => ({ ...d, id: i + 1 }));
+                    }
+
+                    saveToLocalStorage();
+                    handleSearch();
+                    updateStats();
+                    alert('数据导入成功！');
+                } catch (error) {
+                    console.error('Import failed:', error);
+                    alert('导入失败: ' + error.message);
+                }
+                event.target.value = ''; // Reset input
+            };
+
+            if (fileName.endsWith('.json')) {
+                reader.readAsText(file);
+            } else {
+                reader.readAsArrayBuffer(file);
+            }
+        }
+
+        function exportData() {
+            try {
+                if (typeof XLSX === 'undefined') {
+                    console.error('XLSX library not loaded');
+                    alert('Excel 导出库尚未加载，请检查网络连接或稍后再试。');
+                    return;
+                }
+
+                // Prepare headers mapping
+                const headersMap = {
+                    period: '采样时期',
+                    sampling_time: '采样时间',
+                    rive_name: '河流名称',
+                    rive_abbreviation: '河流简称',
+                    river_number: '河流编号',
+                    latitude: '纬度',
+                    longitude: '经度',
+                    plastics_splinter_type: '塑料碎片类型',
+                    plastics_fibre_type: '塑料纤维类型',
+                    plastics_grain_type: '塑料颗粒类型',
+                    plastics_membrane_type: '塑料薄膜类型',
+                    plastics_foam_type: '塑料泡沫类型',
+                    plastics_red_color: '红色塑料',
+                    plastics_black_color: '黑色塑料',
+                    plastics_white_color: '白色塑料',
+                    plastics_transparent_color: '透明塑料',
+                    plastics_blue_color: '蓝色塑料',
+                    plastics_other_color: '其他颜色塑料',
+                    fifty_radius: '微塑料粒径(0-50)',
+                    one_hundred_radius: '微塑料粒径(50-100)',
+                    three_hundred_radius: '微塑料粒径(100-300)',
+                    five_hundred_radius: '微塑料粒径(300-500)',
+                    one_thousand_radius: '微塑料粒径(500-1000)',
+                    two_thousand_radius: '微塑料粒径(1000-2000)',
+                    three_thousand_radius: '微塑料粒径(2000-3000)',
+                    five_thousand_radius: '微塑料粒径(3000-5000)',
+                    plastics_total: '微塑料总量',
+                    water_volume: '水样容量(L)',
+                    plastics_abundance: '微塑料丰度(n/l)'
+                };
+
+                // Format data for Excel
+                const excelData = data.map((item, index) => {
+                    const row = { '序号': index + 1 };
+                    Object.keys(headersMap).forEach(key => {
+                        row[headersMap[key]] = item[key] ?? '';
+                    });
+                    return row;
+                });
+
+                // Create worksheet
+                const ws = XLSX.utils.json_to_sheet(excelData);
+                
+                // Create workbook
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "水质数据");
+
+                // Generate safe filename
+                const now = new Date();
+                const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`;
+                
+                // Download file
+                XLSX.writeFile(wb, `水质微塑料数据_${dateStr}.xlsx`);
+            } catch (error) {
+                console.error('Export failed:', error);
+                alert('导出失败: ' + error.message);
+            }
+        }
+
+        function resetData() {
+            if (confirm('确定要重置所有数据到初始状态吗？这将清除您的所有更改。')) {
+                data = [...INITIAL_DATA];
+                saveToLocalStorage();
+                handleSearch();
+                updateStats();
+            }
+        }
+
+        // Run Init
+        init();
+    </script>
+</body>
+</html>
